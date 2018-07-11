@@ -1,0 +1,14 @@
+{
+  "parserOptions": {
+    "ecmaVersion": 6,
+    "sourceType": "module"
+  },
+  "extends": "standard",
+  "rules": {
+    "generator-star-spacing": "off"
+  },
+  "env": {
+    "browser": true,
+    "node": true
+  }
+}
