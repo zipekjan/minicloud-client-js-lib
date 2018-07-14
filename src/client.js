@@ -1,7 +1,8 @@
 import axios from 'axios'
 import crypto from './lib/crypto'
-import { uint8ToString } from './lib/utils'
 import { EventEmitter } from 'events'
+import User from './user'
+import Path from './path'
 
 export class Client extends EventEmitter {
   constructor (server) {
@@ -43,6 +44,7 @@ export class Client extends EventEmitter {
    */
   getUser () {
     return this._request(this._createUrl('get_user'), 'user')
+      .then(raw => new User(this, raw))
   }
 
   /**
@@ -50,33 +52,7 @@ export class Client extends EventEmitter {
    * @returns {Promise<User>}
    */
   setUser (user) {
-    return this._request(this._createUrl('set_user', user))
-  }
-
-  /**
-   * Initializes user key used to encrypt files.
-   * @param {string} password raw user password
-   * @param {ServerInfo} serverInfo server info
-   * @param {*} options additional options
-   */
-  initializeKey (password, serverInfo, options) {
-    options = options || {}
-
-    let keyLength = options.keyLength || 256
-    let cryptoMode = options.crypto || 'PBKDF2WithHmacSHA1/Blowfish/CBC/PKCS5Padding'
-
-    let key = crypto.getRandomKey(keyLength)
-    let encryptedKey = crypto.encryptKey(key, password, cryptoMode)
-
-    return this.setUser({
-      password: crypto.getPasswordAuthHash(password, serverInfo),
-      key: btoa(uint8ToString(encryptedKey)),
-      key_encryption: cryptoMode
-    })
-  }
-
-  getUserKey (user, password) {
-    return crypto.decryptKey(atob(user.key), password, user.key_encryption)
+    return this._request(this._createUrl('set_user', user.getUpdate()))
   }
 
   /**
@@ -86,9 +62,29 @@ export class Client extends EventEmitter {
    * @returns {Promise<Path>}
    */
   getPath (path, recursive) {
-    return this._request(this._createUrl('get_path', {
-      path, recursive
-    }), 'path')
+    return this._request(
+      this._createUrl(
+        'get_path',
+        { path, recursive }
+      ),
+      'path'
+    ).then(raw => new Path(this, raw))
+  }
+
+  /**
+   * Loads info about path.
+   * @param {number} id path id
+   * @param {boolean?} recursive load subfolders and subfiles too (default false)
+   * @returns {Promise<Path>}
+   */
+  getPathById (id, recursive) {
+    return this._request(
+      this._createUrl(
+        'get_path',
+        { id, recursive }
+      ),
+      'path'
+    ).then(raw => new Path(this, raw))
   }
 
   /**
@@ -97,6 +93,22 @@ export class Client extends EventEmitter {
    */
   getPaths () {
     return this._request(this._createUrl('get_paths'), 'paths')
+      .then(paths => paths.map(raw => new Path(this, raw)))
+  }
+
+  /**
+   * Downloads raw file contents (without decrypting them).
+   * @param {number} id
+   * @param {(loaded: number, total: number) => void} progressCallback
+   * @returns {Promise<ArrayBuffer>}
+   */
+  downloadFileContents (id, progressCallback) {
+    return this._request(this._createUrl('download_file', { id }), null, {
+      responseType: 'arraybuffer',
+      onDownloadProgress (e) {
+        progressCallback && progressCallback(e.loaded, e.total)
+      }
+    })
   }
 
   _createUrl (action, params) {
@@ -113,7 +125,7 @@ export class Client extends EventEmitter {
     return url
   }
 
-  _request (params, expectedType) {
+  _request (params, expectedType, options) {
     let headers = {
       'Content-Type': 'application/x-www-form-urlencoded'
     }
@@ -122,12 +134,20 @@ export class Client extends EventEmitter {
       headers['X-Auth'] = this.auth
     }
 
-    return axios.request({
+    let request = {
       url: this._getApiUrl(),
       method: 'POST',
       data: params,
       headers
-    })
+    }
+
+    if (options) {
+      Object.keys(options).forEach(key => {
+        request[key] = options[key]
+      })
+    }
+
+    return axios.request(request)
       .catch(err => {
         if (err.response) {
           if (err.response.data && err.response.data.type) {
@@ -141,7 +161,7 @@ export class Client extends EventEmitter {
             }
 
             if (err.response.data.type === 'error') {
-              let error = new Error('Unauthorized access')
+              let error = new Error(err.response.data.data)
               error.response = err.response.data
 
               this.emit('error', error)
@@ -152,9 +172,11 @@ export class Client extends EventEmitter {
         throw err
       })
       .then(response => {
+        if (request.responseType === 'arraybuffer') return response.data
         return typeof response.data === 'string' ? JSON.parse(response.data) : response.data
       })
       .then(data => {
+        if (request.responseType === 'arraybuffer') return data
         if (expectedType && data.type !== expectedType) {
           throw new Error(`Unexpected response type ${data.type}`)
         }
