@@ -5,6 +5,21 @@ import { EventEmitter } from 'events'
 import User from './user'
 import Path from './path'
 
+/**
+ * Creates a new Uint8Array based on two different ArrayBuffers
+ *
+ * @private
+ * @param {ArrayBuffer} buffer1 The first buffer.
+ * @param {ArrayBuffer} buffer2 The second buffer.
+ * @return {ArrayBuffer} The new ArrayBuffer created out of the two.
+ */
+function _appendBuffer (buffer1, buffer2) {
+  var tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength)
+  tmp.set(new Uint8Array(buffer1), 0)
+  tmp.set(new Uint8Array(buffer2), buffer1.byteLength)
+  return tmp.buffer
+};
+
 export class Client extends EventEmitter {
   constructor (server) {
     super()
@@ -188,7 +203,33 @@ export class Client extends EventEmitter {
         throw err
       })
       .then(response => {
-        if (options.responseType === 'arraybuffer') return response.arrayBuffer()
+        if (options.responseType === 'arraybuffer') {
+          if (options.onDownloadProgress) {
+            let reader = response.body.getReader()
+            let total = parseInt(response.headers.get('Content-Length') || '0')
+            let loaded = 0
+            let buffer = null
+
+            return reader.read().then(function readChunk ({ done, value }) {
+              if (done) {
+                return buffer
+              }
+
+              if (buffer === null) {
+                buffer = value
+              } else {
+                _appendBuffer(buffer, value)
+              }
+
+              loaded += value.byteLength
+              options.onDownloadProgress({ loaded, total })
+
+              return reader.read().then(readChunk)
+            })
+          } else {
+            return response.arrayBuffer()
+          }
+        }
         return response.json()
       })
       .then(data => {

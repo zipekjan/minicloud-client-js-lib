@@ -20,16 +20,26 @@ export default class File {
    * Download file data and decrypt them (if needed)
    * @param {User} user user data
    * @param {string} password user password
+   * @param {(phase, loaded, total) => void} progressCalback
    * @returns {Promise<ArrayBuffer>}
    */
-  download (user, password) {
+  download (user, password, progressCalback) {
     return this.client
-      .downloadFileContents(this.id)
+      .downloadFileContents(this.id, (loaded, total) => {
+        progressCalback && progressCalback('download', loaded, total)
+      })
       .then(data => {
         if (this.encryption) {
+          progressCalback && progressCalback('decrypting', 0, 1)
+
           return user.getDecryptedKey(password)
             .then(key => crypto.decrypt(data, key, this.encryption))
+            .then(data => {
+              progressCalback && progressCalback('decrypting', 1, 1)
+              return data
+            })
         }
+
         return data
       })
   }
