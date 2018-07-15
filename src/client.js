@@ -2,21 +2,7 @@ import crypto from './lib/crypto'
 import { EventEmitter } from 'events'
 import User from './user'
 import Path from './path'
-
-/**
- * Creates a new Uint8Array based on two different ArrayBuffers
- *
- * @private
- * @param {ArrayBuffer} buffer1 The first buffer.
- * @param {ArrayBuffer} buffer2 The second buffer.
- * @return {ArrayBuffer} The new ArrayBuffer created out of the two.
- */
-function _appendBuffer (buffer1, buffer2) {
-  var tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength)
-  tmp.set(new Uint8Array(buffer1), 0)
-  tmp.set(new Uint8Array(buffer2), buffer1.byteLength)
-  return tmp.buffer
-};
+import { appendBuffer } from './lib/utils'
 
 export class Client extends EventEmitter {
   constructor (server) {
@@ -216,7 +202,7 @@ export class Client extends EventEmitter {
               if (buffer === null) {
                 buffer = value
               } else {
-                _appendBuffer(buffer, value)
+                appendBuffer(buffer, value)
               }
 
               loaded += value.byteLength
