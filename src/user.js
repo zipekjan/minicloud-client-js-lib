@@ -80,7 +80,7 @@ export default class User {
   /**
    * Decrypts and returns user key.
    * @param {string} password user password
-   * @returns {ArrayBuffer} decrypted key
+   * @returns {Promise<ArrayBuffer>} decrypted key
    */
   getDecryptedKey (password) {
     return crypto.decryptKey(this.key, password, this.keyEncryption)

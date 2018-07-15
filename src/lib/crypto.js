@@ -1,13 +1,12 @@
 import { sha256 } from 'js-sha256'
 import Blowfish from 'egoroof-blowfish'
-import CryptoJS from 'crypto-js'
 import { uint8ToString, stringToUint8 } from './utils'
 import * as aesjs from 'aes-js'
 
 const hashCrypto = {
-  'sha1': CryptoJS.algo.SHA1,
-  'sha256': CryptoJS.algo.SHA256,
-  'sha512': CryptoJS.algo.SHA512
+  'sha1': 'sha-1',
+  'sha256': 'sha-256',
+  'sha512': 'sha-512'
 }
 
 const blowfishChainModes = {
@@ -24,8 +23,8 @@ const aesBlockModes = {
 }
 
 const aesPaddingModes = {
-  'pkcs5padding': CryptoJS.pad.Pkcs7,
-  'pkcs7padding': CryptoJS.pad.Pkcs7
+  'pkcs5padding': aesjs.padding.pkcs7,
+  'pkcs7padding': aesjs.padding.pkcs7
 }
 
 const crypto = {
@@ -42,11 +41,23 @@ const crypto = {
 
     if (!hasher) throw new Error(`Unsupported hashing method ${options.hasher}`)
 
-    return stringToUint8(atob(CryptoJS.PBKDF2(password, '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0', {
-      keySize: keySize / 32,
-      iterations,
-      hasher
-    }).toString(CryptoJS.enc.Base64)))
+    return window.crypto.subtle
+      .importKey('raw', stringToUint8(password), { name: 'PBKDF2' }, false, [ 'deriveKey' ])
+      .then(key => {
+        return window.crypto.subtle.deriveKey(
+          {
+            name: 'PBKDF2',
+            salt: stringToUint8('\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'),
+            iterations,
+            hash: hasher
+          },
+          key,
+          { name: 'AES-CBC', length: keySize },
+          true,
+          [ 'encrypt', 'decrypt' ]
+        )
+      })
+      .then(key => window.crypto.subtle.exportKey('raw', key))
   },
 
   getPasswordEncryptionHash (password, mode) {
@@ -97,7 +108,7 @@ const crypto = {
       if (padding === undefined) throw new Error(`Unsupported padding mode ${options[2]}`)
 
       return new BlockMode(key, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        .encrypt(aesjs.padding.pkcs7.pad(new Uint8Array(data)))
+        .encrypt(padding.pad(new Uint8Array(data)))
         .buffer
     }
 
@@ -130,7 +141,7 @@ const crypto = {
       if (BlockMode === undefined) throw new Error(`Unsupported block cipher mode ${options[1]}`)
       if (padding === undefined) throw new Error(`Unsupported padding mode ${options[2]}`)
 
-      return aesjs.padding.pkcs7.strip(new BlockMode(key, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+      return padding.strip(new BlockMode(key, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
         .decrypt(new Uint8Array(data)))
         .buffer
     }
@@ -144,11 +155,14 @@ const crypto = {
       options.unshift('pbkdf2withhmacsha1')
     }
 
-    return this.encrypt(
-      key,
-      this.getPasswordEncryptionHash(password, options.join('/')),
-      options.slice(1).join('/')
-    )
+    return this.getPasswordEncryptionHash(password, options.join('/'))
+      .then(passwordKey => {
+        return this.encrypt(
+          key,
+          passwordKey,
+          options.slice(1).join('/')
+        )
+      })
   },
 
   decryptKey (key, password, mode) {
@@ -157,11 +171,14 @@ const crypto = {
       options.unshift('pbkdf2withhmacsha1')
     }
 
-    return this.decrypt(
-      key,
-      this.getPasswordEncryptionHash(password, options.join('/')),
-      options.slice(1).join('/')
-    )
+    return this.getPasswordEncryptionHash(password, options.join('/'))
+      .then(passwordKey => {
+        return this.decrypt(
+          key,
+          passwordKey,
+          options.slice(1).join('/')
+        )
+      })
   }
 }
 

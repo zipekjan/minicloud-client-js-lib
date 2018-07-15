@@ -27,7 +27,8 @@ export default class File {
       .downloadFileContents(this.id)
       .then(data => {
         if (this.encryption) {
-          return crypto.decrypt(data, user.getDecryptedKey(password), this.encryption)
+          return user.getDecryptedKey(password)
+            .then(key => crypto.decrypt(data, key, this.encryption))
         }
         return data
       })
