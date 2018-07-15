@@ -64,7 +64,5 @@
     "entryFileName": "client.js",
     "mainVarName": "minicloud"
   },
-  "dependencies": {
-    "whatwg-fetch": "^2.0.4"
-  }
+  "dependencies": {}
 }

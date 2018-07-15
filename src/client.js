@@ -1,5 +1,3 @@
-import 'whatwg-fetch'
-
 import crypto from './lib/crypto'
 import { EventEmitter } from 'events'
 import User from './user'
