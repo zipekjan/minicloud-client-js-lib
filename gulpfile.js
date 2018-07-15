@@ -6,6 +6,7 @@ const path = require('path');
 const isparta = require('isparta');
 const webpack = require('webpack');
 const webpackStream = require('webpack-stream');
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 const Instrumenter = isparta.Instrumenter;
 const mochaGlobals = require('./test/setup/.globals');
@@ -67,7 +68,10 @@ function build() {
           {test: /\.js$/, exclude: /node_modules/, loader: 'babel-loader'}
         ]
       },
-      devtool: 'source-map'
+      devtool: 'source-map',
+      plugins: [
+        // new BundleAnalyzerPlugin()
+      ]
     }))
     .pipe(gulp.dest(destinationFolder))
     .pipe($.filter(['**', '!**/*.js.map']))
