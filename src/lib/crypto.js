@@ -1,7 +1,5 @@
-import { sha256 } from 'js-sha256'
 import Blowfish from 'egoroof-blowfish'
 import { uint8ToString, stringToUint8 } from './utils'
-import * as aesjs from 'aes-js'
 
 const hashCrypto = {
   'sha1': 'sha-1',
@@ -19,17 +17,36 @@ const blowfishPaddingModes = {
 }
 
 const aesBlockModes = {
-  'cbc': aesjs.ModeOfOperation.cbc
+  'cbc': 'AES-CBC'
 }
 
 const aesPaddingModes = {
-  'pkcs5padding': aesjs.padding.pkcs7,
-  'pkcs7padding': aesjs.padding.pkcs7
+  'pkcs5padding': 'pkcs7padding',
+  'pkcs7padding': 'pkcs5padding'
+}
+
+function hex (buffer) {
+  var hexCodes = []
+  var view = new DataView(buffer)
+  for (var i = 0; i < view.byteLength; i += 4) {
+    // Using getUint32 reduces the number of iterations needed (we process 4 bytes each time)
+    var value = view.getUint32(i)
+    // toString(16) will give the hex representation of the number without padding
+    var stringValue = value.toString(16)
+    // We use concatenation and slice for padding
+    var padding = '00000000'
+    var paddedValue = (padding + stringValue).slice(-padding.length)
+    hexCodes.push(paddedValue)
+  }
+
+  // Join all the hex strings into one
+  return hexCodes.join('')
 }
 
 const crypto = {
   getPasswordAuthHash (password, serverInfo) {
-    return sha256(serverInfo.salt + password)
+    return window.crypto.subtle.digest('sha-256', stringToUint8(serverInfo.salt + password))
+      .then(hash => hex(hash))
   },
 
   derivePassword (password, options) {
@@ -101,15 +118,17 @@ const crypto = {
     }
 
     if (algorithm === 'aes') {
-      let BlockMode = aesBlockModes[options[1]]
+      let blockMode = aesBlockModes[options[1]]
       let padding = aesPaddingModes[options[2]]
 
-      if (BlockMode === undefined) throw new Error(`Unsupported block cipher mode ${options[1]}`)
+      if (blockMode === undefined) throw new Error(`Unsupported block cipher mode ${options[1]}`)
       if (padding === undefined) throw new Error(`Unsupported padding mode ${options[2]}`)
 
-      return new BlockMode(key, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        .encrypt(padding.pad(new Uint8Array(data)))
-        .buffer
+      let iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+      return window.crypto.subtle
+        .importKey('raw', key, { name: blockMode }, false, ['encrypt'])
+        .then(importedKey => window.crypto.subtle.encrypt({ name: blockMode, iv }, importedKey, data))
     }
 
     throw new Error(`Unsuported encryption algorithm ${algorithm}`)
@@ -135,15 +154,17 @@ const crypto = {
     }
 
     if (algorithm === 'aes') {
-      let BlockMode = aesBlockModes[options[1]]
+      let blockMode = aesBlockModes[options[1]]
       let padding = aesPaddingModes[options[2]]
 
-      if (BlockMode === undefined) throw new Error(`Unsupported block cipher mode ${options[1]}`)
+      if (blockMode === undefined) throw new Error(`Unsupported block cipher mode ${options[1]}`)
       if (padding === undefined) throw new Error(`Unsupported padding mode ${options[2]}`)
 
-      return padding.strip(new BlockMode(key, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        .decrypt(new Uint8Array(data)))
-        .buffer
+      let iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+      return window.crypto.subtle
+        .importKey('raw', key, { name: blockMode }, false, ['decrypt'])
+        .then(importedKey => window.crypto.subtle.decrypt({ name: blockMode, iv }, importedKey, data))
     }
 
     throw new Error(`Unsuported encryption algorithm ${algorithm}`)

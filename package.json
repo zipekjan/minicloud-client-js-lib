@@ -65,9 +65,6 @@
     "mainVarName": "minicloud"
   },
   "dependencies": {
-    "aes-js": "^3.1.1",
-    "axios": "^0.18.0",
-    "js-sha256": "^0.9.0",
     "whatwg-fetch": "^2.0.4"
   }
 }

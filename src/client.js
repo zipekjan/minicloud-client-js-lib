@@ -1,4 +1,5 @@
-import axios from 'axios'
+import 'whatwg-fetch'
+
 import crypto from './lib/crypto'
 import { EventEmitter } from 'events'
 import User from './user'
@@ -19,7 +20,10 @@ export class Client extends EventEmitter {
    * @param {ServerInfo} info server info provided by server
    */
   setAuth (username, password, info) {
-    this.auth = `${username}:${crypto.getPasswordAuthHash(password, info)}`
+    return crypto.getPasswordAuthHash(password, info)
+      .then(hash => {
+        this.auth = `${username}:${hash}`
+      })
   }
 
   /**
@@ -126,6 +130,8 @@ export class Client extends EventEmitter {
   }
 
   _request (params, expectedType, options) {
+    options = options || {}
+
     let headers = {
       'Content-Type': 'application/x-www-form-urlencoded'
     }
@@ -135,19 +141,29 @@ export class Client extends EventEmitter {
     }
 
     let request = {
-      url: this._getApiUrl(),
       method: 'POST',
-      data: params,
+      body: params,
       headers
     }
 
+    /*
     if (options) {
       Object.keys(options).forEach(key => {
         request[key] = options[key]
       })
     }
+    */
 
-    return axios.request(request)
+    return fetch(this._getApiUrl(), request)
+      .then(response => {
+        if (response.ok) {
+          return response
+        } else {
+          var error = new Error(response.statusText)
+          error.response = response
+          throw error
+        }
+      })
       .catch(err => {
         if (err.response) {
           if (err.response.data && err.response.data.type) {
@@ -172,11 +188,11 @@ export class Client extends EventEmitter {
         throw err
       })
       .then(response => {
-        if (request.responseType === 'arraybuffer') return response.data
-        return typeof response.data === 'string' ? JSON.parse(response.data) : response.data
+        if (options.responseType === 'arraybuffer') return response.arrayBuffer()
+        return response.json()
       })
       .then(data => {
-        if (request.responseType === 'arraybuffer') return data
+        if (options.responseType === 'arraybuffer') return data
         if (expectedType && data.type !== expectedType) {
           throw new Error(`Unexpected response type ${data.type}`)
         }
