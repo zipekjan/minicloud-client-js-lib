@@ -145,14 +145,6 @@ export class Client extends EventEmitter {
       headers
     }
 
-    /*
-    if (options) {
-      Object.keys(options).forEach(key => {
-        request[key] = options[key]
-      })
-    }
-    */
-
     return fetch(this._getApiUrl(), request)
       .then(response => {
         if (response.ok) {
