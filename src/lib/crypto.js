@@ -22,7 +22,7 @@ const aesBlockModes = {
 
 const aesPaddingModes = {
   'pkcs5padding': 'pkcs7padding',
-  'pkcs7padding': 'pkcs5padding'
+  'pkcs7padding': 'pkcs7padding'
 }
 
 const crypto = {
